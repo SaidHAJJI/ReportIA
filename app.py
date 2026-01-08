@@ -4,39 +4,38 @@ from datetime import datetime
 from google import genai
 from google.genai import types
 
-# Configuration de la page
-st.set_page_config(page_title="Elite Editorial", page_icon="⚖️", layout="centered")
+# --- CONFIGURATION DE LA PAGE ---
+st.set_page_config(page_title="Elite Editorial Engine", page_icon="⚖️", layout="centered")
 
-# --- STYLE CSS POUR MOBILE ---
-st.markdown(\"\"\"
+# --- STYLE CSS ---
+st.markdown("""
     <style>
-    .stButton>button { width: 100%; border-radius: 20px; height: 3em; background-color: #007bff; color: white; }
+    .stButton>button { width: 100%; border-radius: 20px; height: 3em; background-color: #007bff; color: white; font-weight: bold; }
     .stTextInput>div>div>input { border-radius: 15px; }
     </style>
-    \"\"\", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 st.title("⚖️ Elite Editorial Engine")
-st.caption("Moteur d'analyse géopolitique et stratégique multi-agents")
+st.caption("Analyse stratégique multi-agents (FR / EN / AR)")
 
-# --- CONFIGURATION API ---
-with st.sidebar:
-    st.header("🔑 Paramètres")
-    api_key = st.text_input("Clé API Gemini", type="password")
-    langue = st.selectbox("Langue de rédaction", ["Français", "Anglais", "Arabe"])
-    st.divider()
-    st.info("Déployé via Streamlit Cloud pour Android.")
+# --- GESTION DES SECRETS / API KEY ---
+# Priorité au secret Streamlit, sinon demande saisie utilisateur
+if "GOOGLE_API_KEY" in st.secrets:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+else:
+    api_key = st.sidebar.text_input("Clé API Gemini", type="password")
 
 if not api_key:
-    st.warning("Veuillez entrer votre clé API Gemini dans le menu latéral pour activer les agents.")
+    st.info("Veuillez configurer la GOOGLE_API_KEY dans les Secrets ou la saisir à gauche.")
     st.stop()
 
-# Initialisation Client
+# Initialisation du client
 client = genai.Client(api_key=api_key)
 MODEL_FLASH = "models/gemini-flash-latest"
 MODEL_PRO = "models/gemini-pro-latest"
 search_tool = types.Tool(google_search=types.GoogleSearch())
 
-# --- DICTIONNAIRE DES 9 EXPERTS ---
+# --- DICTIONNAIRE DES AGENTS ---
 PERSONNALITES = {
     "scout": {"role": "Le Scout", "model": MODEL_FLASH, "instr": "Cherche les faits récents via Google Search."},
     "expert_legal": {"role": "L'Expert Juridique", "model": MODEL_PRO, "instr": "Analyse le cadre réglementaire."},
@@ -45,11 +44,10 @@ PERSONNALITES = {
     "skeptic": {"role": "Le Critique", "model": MODEL_FLASH, "instr": "Souligne les risques."},
     "provocateur": {"role": "Le Rédacteur en Chef", "model": MODEL_PRO, "instr": "Identifie une faille logique."},
     "analyst": {"role": "L'Analyste", "model": MODEL_FLASH, "instr": "Calcule la tension du débat (-10 à +10)."},
-    "checker": {"role": "Le Fact-Checker", "model": MODEL_FLASH, "instr": "Vérifie les faits via Search."},
-    "editor": {"role": "Grand Éditorialiste", "model": MODEL_PRO, "instr": "Rédige une enquête de prestige type Le Monde/NYT."}
+    "editor": {"role": "Grand Éditorialiste", "model": MODEL_PRO, "instr": "Rédige une enquête premium type Le Monde/NYT/Al Jazeera."}
 }
 
-def ask_agent(agent_key, prompt, use_search=False):
+def ask_agent(agent_key, prompt, langue, use_search=False):
     p = PERSONNALITES[agent_key]
     config = types.GenerateContentConfig(
         system_instruction=f"Tu es {p['role']}. {p['instr']} RÉPONDS EXCLUSIVEMENT EN {langue.upper()}.",
@@ -57,42 +55,40 @@ def ask_agent(agent_key, prompt, use_search=False):
     )
     return client.models.generate_content(model=p["model"], config=config, contents=prompt).text
 
-# --- INTERFACE DE SAISIE ---
-sujet = st.text_input("📝 Sujet de l'analyse :", placeholder="ex: L'avenir de l'énergie nucléaire...")
+# --- INTERFACE UTILISATEUR ---
+with st.sidebar:
+    st.header("🌍 Options")
+    langue_choisie = st.selectbox("Langue du rapport", ["Français", "Anglais", "Arabe"])
+    st.divider()
+
+sujet = st.text_input("📝 Sujet de l'analyse :", placeholder="ex: La crise de l'eau au Moyen-Orient...")
 
 if st.button("🚀 Lancer l'Analyse Élite"):
     if not sujet:
-        st.error("Merci de saisir un sujet.")
+        st.error("Veuillez entrer un sujet.")
     else:
         with st.status("🧠 Les agents collaborent...", expanded=True) as status:
-            # Workflow
-            st.write("🔎 Intelligence Unit en cours...")
-            intel = ask_agent("scout", f"Donne les faits récents sur {sujet}", use_search=True)
+            st.write("🔎 Recherche d'informations...")
+            intel = ask_agent("scout", f"Donne les faits récents sur {sujet}", langue_choisie, use_search=True)
             
             st.write("⚖️ Expertise Légale & Éco...")
-            leg = ask_agent("expert_legal", f"Enjeux réglementaires : {intel}")
-            eco = ask_agent("expert_eco", f"Impact financier : {intel}")
+            leg = ask_agent("expert_legal", f"Enjeux réglementaires : {intel}", langue_choisie)
+            eco = ask_agent("expert_eco", f"Impact financier : {intel}", langue_choisie)
             
-            st.write("⚔️ Débat et Provocation...")
-            o1 = ask_agent("optimist", f"Opportunités : {intel} {leg} {eco}")
-            s1 = ask_agent("skeptic", f"Risques : {o1}")
-            angle = ask_agent("provocateur", f"Angle mort : {o1} vs {s1}")
+            st.write("⚔️ Duel et Provocation...")
+            o1 = ask_agent("optimist", f"Opportunités : {intel}", langue_choisie)
+            s1 = ask_agent("skeptic", f"Risques : {o1}", langue_choisie)
+            angle = ask_agent("provocateur", f"Angle mort : {o1} vs {s1}", langue_choisie)
             
             st.write("📊 Analyse de tension...")
-            tension = ask_agent("analyst", f"Score de tension : {o1} {s1} {angle}")
+            tension = ask_agent("analyst", f"Score de tension : {o1} {s1}", langue_choisie)
             
-            st.write("✍️ Rédaction finale...")
-            report = ask_agent("editor", f"Rédige l'éditorial final sur {sujet} basé sur : {intel}, {o1}, {s1}, {angle}, {tension}")
+            st.write("✍️ Rédaction de l'éditorial...")
+            final_input = f"Sujet: {sujet}\nIntel: {intel}\nLégal: {leg}\nÉco: {eco}\nDébat: {o1} vs {s1}\nAngle: {angle}\nTension: {tension}"
+            report = ask_agent("editor", f"Rédige l'éditorial final : {final_input}", langue_choisie)
             
             status.update(label="Analyse terminée !", state="complete")
 
         st.markdown("---")
         st.markdown(report)
-        st.sidebar.download_button("📥 Télécharger (Markdown)", report, f"rapport_{sujet}.md")
-\"\"\"
-
-# --- CRÉATION PHYSIQUE DES FICHIERS (Si exécuté localement) ---
-with open("requirements.txt", "w") as f: f.write(requirements)
-with open("app.py", "w") as f: f.write(app_code)
-
-print("✅ Fichiers 'app.py' et 'requirements.txt' générés avec succès pour votre dépôt GitHub.")
+        st.download_button("📥 Télécharger le rapport", report, file_name=f"rapport_{sujet}.md")
