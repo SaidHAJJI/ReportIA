@@ -1,44 +1,71 @@
 import streamlit as st
-from googleapiclient.discovery import build
-from google.oauth2 import service_account
-from googleapiclient.http import MediaInMemoryUpload
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime
 
-st.title("💾 Solution Ultime Quota")
+st.set_page_config(page_title="Elite Archiver", page_icon="📨")
 
-def upload_final_attempt():
+st.title("📨 Test d'Archivage Hybride")
+
+# --- SIMULATION DE CONTENU ---
+dummy_report = f"""# RAPPORT DE TEST E-MAIL
+Généré le : {datetime.now().strftime("%d/%m/%Y à %H:%M")}
+
+Ceci est un test pour valider l'archivage par email et le téléchargement local.
+L'archivage par email permet de garder une trace permanente dans votre boîte aux lettres.
+"""
+
+def send_email(content):
     try:
-        info = dict(st.secrets["gcp_service_account"])
-        credentials = service_account.Credentials.from_service_account_info(info)
-        service = build('drive', 'v3', credentials=credentials)
-        
-        folder_id = st.secrets.get("DRIVE_FOLDER_ID", "").strip()
-        
-        # Le changement est ici : on définit explicitement que le fichier 
-        # doit être créé DIRECTEMENT à l'intérieur de votre quota personnel.
-        file_metadata = {
-            'name': 'SUCCES_FINAL.txt',
-            'parents': [folder_id],
-            'mimeType': 'text/plain'
-        }
-        
-        media = MediaInMemoryUpload(b'Test quota ok', mimetype='text/plain')
-        
-        # On force l'utilisation du quota du dossier parent (le vôtre)
-        file = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id',
-            supportsAllDrives=True,
-            # Cette option est cruciale pour certains types de comptes
-            keepRevisionForever=False 
-        ).execute()
-        
-        return f"✅ INCROYABLE ! Ça a marché. ID : {file.get('id')}"
-    
-    except Exception as e:
-        if "storageQuotaExceeded" in str(e):
-            return "❌ Google refuse toujours le quota du Compte de Service."
-        return f"❌ Autre erreur : {str(e)}"
+        sender = st.secrets["EMAIL_SENDER"]
+        password = st.secrets["EMAIL_PASSWORD"]
+        receiver = st.secrets["EMAIL_RECEIVER"]
 
-if st.button("FORCER L'UPLOAD SUR MON QUOTA PERSONNEL"):
-    st.write(upload_final_attempt())
+        # Configuration du message
+        msg = MIMEMultipart()
+        msg['From'] = sender
+        msg['To'] = receiver
+        msg['Subject'] = f"💠 ARCHIVE ELITE - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        
+        msg.attach(MIMEText(content, 'plain'))
+
+        # Connexion au serveur Gmail
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender, password)
+        server.sendmail(sender, receiver, msg.as_string())
+        server.quit()
+        return True, "✅ Email envoyé avec succès !"
+    except Exception as e:
+        return False, f"❌ Erreur Email : {str(e)}"
+
+# --- INTERFACE ---
+st.subheader("Options d'exportation")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.write("📂 **Option 1 : Local**")
+    st.download_button(
+        label="TÉLÉCHARGER LE RAPPORT",
+        data=dummy_report,
+        file_name="rapport_test.md",
+        mime="text/markdown"
+    )
+
+with col2:
+    st.write("📧 **Option 2 : Cloud**")
+    if st.button("ENVOYER PAR EMAIL"):
+        with st.spinner("Envoi en cours..."):
+            success, message = send_email(dummy_report)
+            if success:
+                st.success(message)
+                st.balloons()
+            else:
+                st.error(message)
+                st.info("Avez-vous bien configuré le 'Mot de passe d'application' dans vos secrets ?")
+
+st.markdown("---")
+st.write("Aperçu du contenu test :")
+st.code(dummy_report, language="markdown")
