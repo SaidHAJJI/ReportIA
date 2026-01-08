@@ -3,54 +3,38 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from googleapiclient.http import MediaInMemoryUpload
 
-st.set_page_config(page_title="Test Final Drive", page_icon="💾")
-st.title("💾 Test de Sauvegarde (Sans Agents)")
+st.title("💾 Test Drive : Solution Quota")
 
-def upload_test_file():
+def upload_fix():
     try:
-        # 1. Authentification
         info = dict(st.secrets["gcp_service_account"])
         credentials = service_account.Credentials.from_service_account_info(info)
         service = build('drive', 'v3', credentials=credentials)
         
-        folder_id = st.secrets.get("DRIVE_FOLDER_ID", "")
+        folder_id = st.secrets.get("DRIVE_FOLDER_ID", "").strip()
         
-        # 2. Métadonnées du fichier
+        # On crée un fichier SANS corps de texte d'abord pour tester
         file_metadata = {
-            'name': 'TEST_QUOTA_REUSSI.txt',
-            'parents': [folder_id] if folder_id else []
+            'name': 'SUCCES_QUOTA.txt',
+            'parents': [folder_id]
         }
         
-        # 3. Contenu
-        content = "Si ce fichier est là, le problème de quota est résolu !"
-        media = MediaInMemoryUpload(content.encode('utf-8'), mimetype='text/plain')
+        # On utilise le média le plus simple possible
+        media = MediaInMemoryUpload(b'OK', mimetype='text/plain')
         
-        # 4. Envoi avec les options de forçage de quota
-        st.write(f"Tentative d'envoi vers : `{folder_id}`")
+        # Le secret : on ne demande QUE l'ID en retour
         file = service.files().create(
             body=file_metadata,
             media_body=media,
             fields='id',
-            supportsAllDrives=True  # Autorise l'utilisation du stockage partagé
+            # On active ces deux options pour les comptes de service
+            supportsAllDrives=True,
+            ignoreDefaultVisibility=True 
         ).execute()
         
-        return f"✅ SUCCÈS ! ID du fichier : {file.get('id')}", True
-
+        return f"✅ ENFIN ! ID : {file.get('id')}"
     except Exception as e:
-        return f"❌ ERREUR : {str(e)}", False
+        return f"❌ {str(e)}"
 
-# --- Interface ---
-st.write("Ce bouton teste uniquement la connexion et le quota du dossier Drive.")
-
-if st.button("TESTER LA SAUVEGARDE"):
-    message, success = upload_test_file()
-    if success:
-        st.success(message)
-        st.balloons()
-    else:
-        st.error(message)
-        st.info("""
-        **Si l'erreur de quota persiste :**
-        Allez sur Google Drive, faites un clic droit sur votre dossier, et vérifiez que l'email du compte de service est bien 'Éditeur'. 
-        Si c'est déjà le cas, essayez de créer un **nouveau dossier vide** et de changer l'ID dans vos Secrets.
-        """)
+if st.button("TENTER L'UPLOAD FINAL"):
+    st.write(upload_fix())
