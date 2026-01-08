@@ -9,17 +9,17 @@ from google.genai import types
 # --- CONFIGURATION PAGE ---
 st.set_page_config(page_title="Elite Intelligence Terminal", page_icon="💠", layout="centered")
 
-# --- STYLE CSS PERSONNALISÉ ---
+# --- STYLE CSS ---
 st.markdown("""
     <style>
-    .report-card { background-color: #1a1c24; border-radius: 15px; padding: 25px; border-left: 5px solid #00d4ff; color: #e0e0e0; margin-top: 20px; line-height: 1.6; }
-    .stButton > button { border-radius: 25px; font-weight: bold; transition: 0.3s; }
-    .main-btn > div > button { background: linear-gradient(45deg, #007bff, #00d4ff); color: white; width: 100%; border: none; padding: 12px; }
+    .report-card { background-color: #1a1c24; border-radius: 15px; padding: 25px; border-left: 5px solid #00d4ff; color: #e0e0e0; margin-top: 20px; }
+    div.stButton > button { border-radius: 25px; font-weight: bold; width: 100%; }
+    .btn-run { background: linear-gradient(45deg, #007bff, #00d4ff) !important; color: white !important; border: none !important; padding: 10px !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- LOGIQUE D'ENVOI EMAIL ---
-def send_report_email(content, subject_name):
+# --- FONCTION EMAIL ---
+def send_email(content, subject_text):
     try:
         sender = st.secrets["EMAIL_SENDER"]
         password = st.secrets["EMAIL_PASSWORD"]
@@ -28,10 +28,9 @@ def send_report_email(content, subject_name):
         msg = MIMEMultipart()
         msg['From'] = sender
         msg['To'] = receiver
-        msg['Subject'] = f"💠 ARCHIVE ELITE : {subject_name}"
+        msg['Subject'] = f"💠 ARCHIVE ELITE : {subject_text}"
         
-        body = f"Veuillez trouver ci-joint votre rapport stratégique généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}.\n\n---\n\n{content}"
-        msg.attach(MIMEText(body, 'plain'))
+        msg.attach(MIMEText(content, 'plain'))
 
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
@@ -40,10 +39,10 @@ def send_report_email(content, subject_name):
         server.quit()
         return True
     except Exception as e:
-        st.error(f"Erreur Email : {e}")
+        st.error(f"Erreur d'envoi Email : {e}")
         return False
 
-# --- CONFIGURATION AGENTS IA ---
+# --- CONFIGURATION IA ---
 client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
 MODEL_FLASH = "gemini-1.5-flash"
 MODEL_PRO = "gemini-1.5-pro"
@@ -56,51 +55,46 @@ def ask_agent(role, instr, prompt, model, langue, search=False):
     response = client.models.generate_content(model=model, config=config, contents=prompt)
     return response.text
 
-# --- INTERFACE UTILISATEUR ---
+# --- INTERFACE ---
 st.title("💠 Elite Intelligence Terminal")
-st.caption("Système d'analyse stratégique multi-agents")
+langue = st.sidebar.selectbox("Langue", ["Français", "Anglais", "Arabe"])
+sujet = st.text_input("Sujet stratégique", placeholder="Entrez votre sujet...")
 
-langue = st.sidebar.selectbox("Langue de rédaction", ["Français", "Anglais", "Arabe"])
-sujet = st.text_input("Sujet stratégique", placeholder="Ex: L'impact de l'IA sur le marché de l'énergie en 2026...")
-
-if st.button("LANCER L'ANALYSE", key="run_btn", help="Cliquez pour activer les agents") and sujet:
-    with st.status("⚡ Cycle d'intelligence en cours...", expanded=True) as status:
+if st.button("DÉCRYPTER", key="run_btn") and sujet:
+    with st.status("⚡ Analyse multi-agents en cours...", expanded=True) as status:
+        st.write("🔎 Scout : Recherche de données...")
+        intel = ask_agent("Scout", "Cherche des faits précis.", sujet, MODEL_FLASH, langue, True)
         
-        st.write("🔎 **Scout** : Scan des données mondiales...")
-        intel = ask_agent("Scout", "Cherche des faits précis et récents.", sujet, MODEL_FLASH, langue, True)
+        st.write("⚖️ Expert : Analyse stratégique...")
+        analyse = ask_agent("Expert", "Analyse le contexte.", intel, MODEL_PRO, langue)
         
-        st.write("⚖️ **Expert** : Analyse structurelle...")
-        analyse = ask_agent("Expert", "Analyse les implications stratégiques de ces données.", intel, MODEL_PRO, langue)
+        st.write("✍️ Éditeur : Synthèse de prestige...")
+        report = ask_agent("Éditeur", "Rédige l'éditorial final.", f"Sujet: {sujet}\nIntel: {intel}\nAnalyse: {analyse}", MODEL_PRO, langue)
         
-        st.write("✍️ **Éditeur** : Synthèse de prestige...")
-        report = ask_agent("Éditeur", "Rédige un éditorial de haut niveau (Markdown).", f"Sujet: {sujet}\nIntel: {intel}\nAnalyse: {analyse}", MODEL_PRO, langue)
-        
+        # On garde en mémoire pour l'export
+        st.session_state.last_report = report
+        st.session_state.last_subject = sujet
         status.update(label="Analyse terminée", state="complete")
 
-    # Stockage en session pour l'export
-    st.session_state.current_report = report
-    st.session_state.current_subject = sujet
-
-# --- AFFICHAGE ET EXPORT ---
-if "current_report" in st.session_state:
-    st.markdown(f'<div class="report-card">{st.session_state.current_report}</div>', unsafe_allow_html=True)
+# --- ZONE D'EXPORTATION ---
+if "last_report" in st.session_state:
+    st.markdown(f'<div class="report-card">{st.session_state.last_report}</div>', unsafe_allow_html=True)
     
     st.write("---")
-    st.subheader("📥 Options d'Archivage")
+    st.subheader("📥 Archivage du rapport")
+    col1, col2 = st.columns(2)
     
-    c1, c2 = st.columns(2)
-    
-    with c1:
+    with col1:
         st.download_button(
-            label="💾 TÉLÉCHARGER (Markdown)",
-            data=st.session_state.current_report,
+            label="💾 TÉLÉCHARGER (.MD)",
+            data=st.session_state.last_report,
             file_name=f"Elite_Report_{datetime.now().strftime('%Y%m%d')}.md",
-            mime="text/markdown",
-            use_container_width=True
+            mime="text/markdown"
         )
     
-    with c2:
-        if st.button("📨 ENVOYER PAR EMAIL", use_container_width=True):
-            if send_report_email(st.session_state.current_report, st.session_state.current_subject):
-                st.success("Rapport envoyé à votre adresse Gmail !")
-                st.balloons()
+    with col2:
+        if st.button("📨 ENVOYER PAR EMAIL"):
+            with st.spinner("Envoi..."):
+                if send_email(st.session_state.last_report, st.session_state.last_subject):
+                    st.success("Rapport envoyé !")
+                    st.balloons()
