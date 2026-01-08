@@ -8,37 +8,31 @@ st.title("📤 Test de dépôt Drive")
 
 def test_upload():
     try:
-        # 1. Chargement des credentials depuis les Secrets
         info = dict(st.secrets["gcp_service_account"])
         credentials = service_account.Credentials.from_service_account_info(info)
         service = build('drive', 'v3', credentials=credentials)
         
-        # 2. Récupération de l'ID du dossier
         folder_id = st.secrets.get("DRIVE_FOLDER_ID", "")
         
-        # 3. Métadonnées du fichier bidon
         file_metadata = {
-            'name': 'TEST_PARTAGE_OK.txt',
-            'parents': [folder_id] if folder_id else []
+            'name': 'TEST_FINAL_QUOTA.txt',
+            'parents': [folder_id] # C'est cette ligne qui utilise VOTRE quota
         }
         
-        # 4. Contenu du fichier
-        content = "Bravo ! Le partage du dossier fonctionne. L'application peut maintenant écrire des rapports."
-        media = MediaInMemoryUpload(content.encode('utf-8'), mimetype='text/plain')
+        # On utilise un média très léger
+        media = MediaInMemoryUpload("Test réussi !".encode('utf-8'), mimetype='text/plain')
         
-        # 5. Exécution de l'upload
-        st.write(f"🔄 Tentative d'envoi vers le dossier : `{folder_id}`...")
+        # IMPORTANT : On ajoute supportsAllDrives=True pour autoriser le compte de service
         file = service.files().create(
             body=file_metadata, 
             media_body=media, 
-            fields='id'
+            fields='id',
+            supportsAllDrives=True # Option de sécurité pour les comptes de service
         ).execute()
         
-        return f"✅ SUCCÈS ! Fichier créé avec l'ID : {file.get('id')}", True
-
+        return f"✅ ENFIN ! Fichier créé : {file.get('id')}", True
     except Exception as e:
         return f"❌ ERREUR : {str(e)}", False
-
 # Interface
 st.write("Ce test va créer un petit fichier texte dans votre dossier Drive.")
 
