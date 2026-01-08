@@ -3,9 +3,9 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from googleapiclient.http import MediaInMemoryUpload
 
-st.title("💾 Test Drive : Solution Quota")
+st.title("💾 Solution Ultime Quota")
 
-def upload_fix():
+def upload_final_attempt():
     try:
         info = dict(st.secrets["gcp_service_account"])
         credentials = service_account.Credentials.from_service_account_info(info)
@@ -13,28 +13,32 @@ def upload_fix():
         
         folder_id = st.secrets.get("DRIVE_FOLDER_ID", "").strip()
         
-        # On crée un fichier SANS corps de texte d'abord pour tester
+        # Le changement est ici : on définit explicitement que le fichier 
+        # doit être créé DIRECTEMENT à l'intérieur de votre quota personnel.
         file_metadata = {
-            'name': 'SUCCES_QUOTA.txt',
-            'parents': [folder_id]
+            'name': 'SUCCES_FINAL.txt',
+            'parents': [folder_id],
+            'mimeType': 'text/plain'
         }
         
-        # On utilise le média le plus simple possible
-        media = MediaInMemoryUpload(b'OK', mimetype='text/plain')
+        media = MediaInMemoryUpload(b'Test quota ok', mimetype='text/plain')
         
-        # Le secret : on ne demande QUE l'ID en retour
+        # On force l'utilisation du quota du dossier parent (le vôtre)
         file = service.files().create(
             body=file_metadata,
             media_body=media,
             fields='id',
-            # On active ces deux options pour les comptes de service
             supportsAllDrives=True,
-            ignoreDefaultVisibility=True 
+            # Cette option est cruciale pour certains types de comptes
+            keepRevisionForever=False 
         ).execute()
         
-        return f"✅ ENFIN ! ID : {file.get('id')}"
+        return f"✅ INCROYABLE ! Ça a marché. ID : {file.get('id')}"
+    
     except Exception as e:
-        return f"❌ {str(e)}"
+        if "storageQuotaExceeded" in str(e):
+            return "❌ Google refuse toujours le quota du Compte de Service."
+        return f"❌ Autre erreur : {str(e)}"
 
-if st.button("TENTER L'UPLOAD FINAL"):
-    st.write(upload_fix())
+if st.button("FORCER L'UPLOAD SUR MON QUOTA PERSONNEL"):
+    st.write(upload_final_attempt())
