@@ -3,8 +3,11 @@ import time
 from datetime import datetime
 from google import genai
 from google.genai import types
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
+from googleapiclient.http import MediaInMemoryUpload
 
-# --- CONFIGURATION PRE-REQUIS ---
+# --- CONFIGURATION PAGE ---
 st.set_page_config(
     page_title="Elite Intelligence Terminal",
     page_icon="💠",
@@ -12,7 +15,35 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- STYLE CSS AVANCÉ ---
+# --- FONCTION SAUVEGARDE DRIVE ---
+def upload_to_drive(content, filename):
+    try:
+        # On récupère les secrets
+        info = dict(st.secrets["gcp_service_account"])
+        
+        # NETTOYAGE CRUCIAL DU PADDING : 
+        # On remplace les doubles backslashes que TOML peut ajouter par des vrais sauts de ligne
+        info["private_key"] = info["private_key"].replace("\\n", "\n")
+        
+        credentials = service_account.Credentials.from_service_account_info(info)
+        service = build('drive', 'v3', credentials=credentials)
+
+        folder_id = st.secrets.get("DRIVE_FOLDER_ID", "")
+
+        file_metadata = {
+            'name': filename,
+            'parents': [folder_id] if folder_id else [],
+            'mimeType': 'text/markdown'
+        }
+        media = MediaInMemoryUpload(content.encode('utf-8'), mimetype='text/markdown')
+        
+        file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        return file.get('id')
+    except Exception as e:
+        st.sidebar.error(f"❌ Erreur Drive : {str(e)}")
+        return None
+
+# --- STYLE CSS ---
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
@@ -26,12 +57,6 @@ st.markdown("""
         color: #e0e0e0;
         line-height: 1.6;
     }
-    .archive-item {
-        padding: 10px;
-        border-bottom: 1px solid #333;
-        font-size: 0.85em;
-        cursor: pointer;
-    }
     div.stButton > button:first-child {
         background: linear-gradient(45deg, #007bff, #00d4ff);
         border: none;
@@ -44,19 +69,13 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- INITIALISATION DES ARCHIVES (Session State) ---
+# --- INITIALISATION ---
 if "archives" not in st.session_state:
     st.session_state.archives = []
 
-# --- GESTION DES SECRETS ---
-if "GOOGLE_API_KEY" in st.secrets:
-    api_key = st.secrets["GOOGLE_API_KEY"]
-else:
-    api_key = st.sidebar.text_input("🔑 API KEY", type="password")
-
+api_key = st.secrets.get("GOOGLE_API_KEY")
 if not api_key:
-    st.title("💠 Elite Intelligence")
-    st.info("Système en attente de clé API...")
+    st.error("🔑 Clé API manquante.")
     st.stop()
 
 client = genai.Client(api_key=api_key)
@@ -64,7 +83,6 @@ MODEL_FLASH = "models/gemini-flash-latest"
 MODEL_PRO = "models/gemini-pro-latest"
 search_tool = types.Tool(google_search=types.GoogleSearch())
 
-# --- MOTEUR D'AGENTS ---
 def ask_agent(role_name, instr, prompt, model, langue, use_search=False):
     config = types.GenerateContentConfig(
         system_instruction=f"Tu es {role_name}. {instr} RÉPONDS EN {langue.upper()}.",
@@ -76,28 +94,24 @@ def ask_agent(role_name, instr, prompt, model, langue, use_search=False):
     except Exception as e:
         return f"Erreur : {str(e)}"
 
-# --- INTERFACE PRINCIPALE ---
+# --- INTERFACE ---
 st.title("💠 Intelligence Terminal")
 
 with st.sidebar:
-    st.header("📂 Archives Récentes")
-    if not st.session_state.archives:
-        st.write("Aucun rapport en mémoire.")
-    else:
+    st.header("📂 Archives")
+    langue = st.selectbox("Langue", ["Français", "Anglais", "Arabe"])
+    if st.session_state.archives:
         for i, arc in enumerate(reversed(st.session_state.archives[-5:])):
             if st.button(f"📄 {arc['sujet'][:20]}...", key=f"arc_{i}"):
                 st.session_state.current_report = arc['contenu']
-    
-    st.divider()
-    langue = st.selectbox("Langue", ["Français", "Anglais", "Arabe"])
-    if st.button("🗑️ Effacer l'historique"):
+    if st.button("🗑️ Effacer"):
         st.session_state.archives = []
         st.rerun()
 
-# --- FORMULAIRE DE RECHERCHE ---
 sujet = st.text_input("", placeholder="Entrez le sujet stratégique...", label_visibility="collapsed")
+
 if st.button("DÉCRYPTER") and sujet:
-    with st.status("⚡ Analyse multi-agents...", expanded=True) as status:
+    with st.status("⚡ Analyse et Archivage...", expanded=True) as status:
         st.write("🔎 Scan des données...")
         intel = ask_agent("Scout", "Cherche des faits.", f"Dernières infos sur {sujet}", MODEL_FLASH, langue, True)
         
@@ -107,12 +121,20 @@ if st.button("DÉCRYPTER") and sujet:
         st.write("✍️ Rédaction de l'éditorial...")
         report = ask_agent("Éditeur", "Rédige un éditorial de prestige.", f"Sujet: {sujet}\nIntel: {intel}\nAnalyse: {d1}", MODEL_PRO, langue)
         
-        # Enregistrement en archive
-        st.session_state.archives.append({"sujet": sujet, "contenu": report, "date": datetime.now()})
-        st.session_state.current_report = report
-        status.update(label="Rapport Final Prêt", state="complete")
+        # SAUVEGARDE DRIVE
+        st.write("💾 Archivage sur Google Drive...")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        filename = f"INTEL_{sujet.replace(' ', '_')[:15]}_{timestamp}.md"
+        drive_id = upload_to_drive(report, filename)
 
-# --- AFFICHAGE DU RAPPORT ACTIF ---
+        st.session_state.archives.append({"sujet": sujet, "contenu": report})
+        st.session_state.current_report = report
+        
+        if drive_id:
+            status.update(label=f"✅ Rapport archivé sur Drive", state="complete")
+        else:
+            status.update(label="⚠️ Rapport généré mais échec Drive", state="error")
+
 if "current_report" in st.session_state:
     st.markdown(f'<div class="report-card">{st.session_state.current_report}</div>', unsafe_allow_html=True)
     st.download_button("📥 EXPORTER", st.session_state.current_report, file_name=f"report.md")
