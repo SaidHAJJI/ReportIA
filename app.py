@@ -62,7 +62,7 @@ if st.button("DÉCRYPTER", key="run_btn") and sujet:
     with st.status("⚡ Analyse multi-agents en cours...", expanded=True) as status:
         st.write("🔎 Scout : Analyse des données...")
         
-        # CHANGEMENT ICI : On passe 'search' à False pour éviter la ClientError de Google
+        # 'search' à False pour la stabilité
         intel = ask_agent("Scout", "Cherche des faits précis.", sujet, MODEL_FLASH, langue, False)
         
         st.write("⚖️ Expert : Analyse stratégique...")
