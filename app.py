@@ -35,12 +35,16 @@ st.markdown("""
         font-weight: bold;
         width: 100%;
     }
+    /* Style pour le toggle */
+    .stCheckbox { color: #00d4ff; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- INITIALISATION DES ARCHIVES ---
 if "archives" not in st.session_state:
     st.session_state.archives = []
+if "current_report" not in st.session_state:
+    st.session_state.current_report = None
 
 # --- GESTION DES SECRETS ---
 if "GOOGLE_API_KEY" in st.secrets:
@@ -55,40 +59,26 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-# --- CONFIGURATION DES MODES (Objectif 1) ---
+# --- CONFIGURATION DYNAMIQUE (OPTIMISATION COÛTS) ---
 with st.sidebar:
-    st.header("⚙️ Configuration")
-    mode_elite = st.toggle("Mode Élite (Gemini 1.5 Pro)", value=False, help="Activez pour une analyse plus profonde, désactivez pour économiser des tokens.")
+    st.header("⚙️ Paramètres Système")
     
-    # Définition dynamique des modèles
+    # Objectif 1 : Toggle Mode Standard vs Élite
+    mode_elite = st.toggle("💎 Mode Élite", value=False, help="Désactivé: Flash (Économique) | Activé: Pro (Analytique)")
+    
     MODEL_SCOUT = "gemini-1.5-flash"
     if mode_elite:
         MODEL_EXPERT = "gemini-1.5-pro"
         MODEL_EDITOR = "gemini-1.5-pro"
-        st.caption("⚡ Mode Élite : Performance maximale")
+        status_msg = "Performance Maximale (Pro)"
     else:
         MODEL_EXPERT = "gemini-1.5-flash"
         MODEL_EDITOR = "gemini-1.5-flash"
-        st.caption("🔋 Mode Standard : Économie de tokens")
-
-search_tool = types.Tool(google_search=types.GoogleSearch())
-
-# --- MOTEUR D'AGENTS ---
-def ask_agent(role_name, instr, prompt, model, langue, use_search=False):
-    config = types.GenerateContentConfig(
-        system_instruction=f"Tu es {role_name}. {instr} RÉPONDS EN {langue.upper()}.",
-        tools=[search_tool] if use_search else []
-    )
-    try:
-        response = client.models.generate_content(model=model, config=config, contents=prompt)
-        return response.text
-    except Exception as e:
-        return f"Erreur : {str(e)}"
-
-# --- INTERFACE PRINCIPALE ---
-st.title("💠 Intelligence Terminal")
-
-with st.sidebar:
+        status_msg = "Économie de Tokens (Flash)"
+    
+    st.caption(f"Mode actuel : **{status_msg}**")
+    st.divider()
+    
     st.header("📂 Archives Récentes")
     if not st.session_state.archives:
         st.write("Aucun rapport.")
@@ -102,31 +92,63 @@ with st.sidebar:
     langue = st.selectbox("Langue", ["Français", "Anglais", "Arabe"])
     if st.button("🗑️ Effacer l'historique"):
         st.session_state.archives = []
+        st.session_state.current_report = None
         st.rerun()
 
-# --- FORMULAIRE DE RECHERCHE ---
+search_tool = types.Tool(google_search=types.GoogleSearch())
+
+# --- MOTEUR D'AGENTS ---
+def ask_agent(role_name, instr, prompt, model, langue, use_search=False):
+    # Objectif 2 : Directives de concision intégrées systématiquement
+    system_prompt = (
+        f"Tu es {role_name}. {instr} "
+        f"CONSIGNE STRICTE : Sois extrêmement concis et factuel. "
+        f"Évite les formules de politesse et le bavardage. "
+        f"Utilise des listes à puces. RÉPONDS EN {langue.upper()}."
+    )
+    
+    config = types.GenerateContentConfig(
+        system_instruction=system_prompt,
+        tools=[search_tool] if use_search else []
+    )
+    try:
+        response = client.models.generate_content(model=model, config=config, contents=prompt)
+        return response.text
+    except Exception as e:
+        return f"Erreur : {str(e)}"
+
+# --- INTERFACE PRINCIPALE ---
+st.title("💠 Intelligence Terminal")
+
+# Formulaire de saisie
 sujet = st.text_input("", placeholder="Entrez le sujet stratégique...", label_visibility="collapsed")
 
-# Ajout des contraintes de concision (Objectif 2)
-CONCISE_RULES = "Sois extrêmement concis, va droit au but, utilise des listes à puces. Évite le bavardage inutile."
-
 if st.button("DÉCRYPTER") and sujet:
-    with st.status("⚡ Analyse multi-agents...", expanded=True) as status:
-        st.write("🔎 Scan des données...")
-        # Scout : Toujours en Flash pour la rapidité
-        intel = ask_agent("Scout", f"Cherche des faits. {CONCISE_RULES}", f"Dernières infos sur {sujet}", MODEL_SCOUT, langue, True)
+    with st.status("⚡ Orchestration des agents...", expanded=True) as status:
         
-        st.write("⚖️ Analyse croisée...")
-        d1 = ask_agent("Expert", f"Analyse stratégique. {CONCISE_RULES}", f"Analyse ce contexte: {intel}", MODEL_EXPERT, langue)
+        # Agent 1 : Scout (Toujours Flash pour la recherche)
+        st.write("🔎 Scan des données sources...")
+        intel = ask_agent("Scout", "Cherche des faits récents.", f"Dernières infos sur {sujet}", MODEL_SCOUT, langue, True)
         
-        st.write("✍️ Rédaction de l'éditorial...")
-        report = ask_agent("Éditeur", f"Rédige un éditorial de prestige. {CONCISE_RULES} Structure claire.", f"Sujet: {sujet}\nIntel: {intel}\nAnalyse: {d1}", MODEL_EDITOR, langue)
+        # Agent 2 : Expert (Flash ou Pro selon le Toggle)
+        st.write("⚖️ Analyse stratégique...")
+        d1 = ask_agent("Expert", "Analyse les implications et risques.", f"Contexte : {intel}", MODEL_EXPERT, langue)
         
+        # Agent 3 : Éditeur (Flash ou Pro selon le Toggle)
+        st.write("✍️ Génération de l'éditorial...")
+        report = ask_agent("Éditeur", "Rédige une synthèse de haut niveau.", f"Sujet: {sujet}\nDonnées: {intel}\nAnalyse: {d1}", MODEL_EDITOR, langue)
+        
+        # Sauvegarde
         st.session_state.archives.append({"sujet": sujet, "contenu": report, "date": datetime.now()})
         st.session_state.current_report = report
-        status.update(label="Rapport Final Prêt", state="complete")
+        status.update(label="Analyse terminée", state="complete")
 
 # --- AFFICHAGE DU RAPPORT ACTIF ---
-if "current_report" in st.session_state:
+if st.session_state.current_report:
     st.markdown(f'<div class="report-card">{st.session_state.current_report}</div>', unsafe_allow_html=True)
-    st.download_button("📥 EXPORTER", st.session_state.current_report, file_name=f"report.md")
+    st.download_button(
+        label="📥 EXPORTER LE RAPPORT",
+        data=st.session_state.current_report,
+        file_name=f"rapport_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
+        mime="text/markdown"
+    )
