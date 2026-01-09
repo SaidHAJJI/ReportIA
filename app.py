@@ -57,16 +57,14 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-# --- CONFIGURATION DES MODES (Objectif 1 : Optimisation Coûts) ---
+# --- CONFIGURATION DES MODES ---
 MODEL_FLASH = "models/gemini-flash-latest"
 MODEL_PRO = "models/gemini-pro-latest"
 
 with st.sidebar:
     st.header("⚙️ Paramètres")
-    # Toggle pour choisir le mode
     mode_elite = st.toggle("💎 Mode Élite", value=False, help="Standard: Flash partout | Élite: Pro pour l'Expert et l'Éditeur")
     
-    # Attribution dynamique des modèles selon le toggle
     active_scout_model = MODEL_FLASH
     if mode_elite:
         active_expert_model = MODEL_PRO
@@ -98,9 +96,7 @@ search_tool = types.Tool(google_search=types.GoogleSearch())
 
 # --- MOTEUR D'AGENTS ---
 def ask_agent(role_name, instr, prompt, model, langue, use_search=False):
-    # Objectif 2 : Instructions de concision pour réduire la consommation de tokens
-    optim_instr = "RÉPONSE COURTE ET FACTUELLE UNIQUEMENT. Pas d'introduction ni de conclusion. Style télégraphique ou listes. "
-    
+    optim_instr = "RÉPONSE COURTE ET FACTUELLE. Style direct. "
     config = types.GenerateContentConfig(
         system_instruction=f"Tu es {role_name}. {optim_instr} {instr} RÉPONDS EN {langue.upper()}.",
         tools=[search_tool] if use_search else []
@@ -117,15 +113,26 @@ st.title("💠 Intelligence Terminal")
 sujet = st.text_input("", placeholder="Sujet stratégique à décrypter...", label_visibility="collapsed")
 
 if st.button("DÉCRYPTER") and sujet:
-    with st.status("⚡ Analyse multi-agents...", expanded=True) as status:
+    with st.status("⚡ Orchestration Multi-Agents...", expanded=True) as status:
         
-        st.write("🔎 Scout : Scan des données...")
+        # 1. SCOUT
+        st.write("🔎 Scout : Scan des données sources...")
         intel = ask_agent("Scout", "Cherche des faits.", f"Dernières infos sur {sujet}", active_scout_model, langue, True)
         
+        # 2. EXPERT
         st.write("⚖️ Expert : Analyse stratégique...")
         d1 = ask_agent("Expert", "Analyse ce contexte.", f"Context: {intel}", active_expert_model, langue)
         
-        st.write("✍️ Éditeur : Rédaction finale...")
+        # --- OPTIMISATION : PAUSE D'UNE MINUTE ---
+        st.write("⏳ Temporisation de sécurité (1 min) avant rédaction...")
+        pause_bar = st.progress(0)
+        for percent_complete in range(100):
+            time.sleep(0.6) # 0.6s * 100 = 60 secondes
+            pause_bar.progress(percent_complete + 1)
+        st.write("✅ Reprise du flux...")
+        
+        # 3. ÉDITEUR
+        st.write("✍️ Éditeur : Rédaction du rapport final...")
         report = ask_agent("Éditeur", "Rédige un éditorial de prestige.", f"Sujet: {sujet}\nIntel: {intel}\nAnalyse: {d1}", active_editor_model, langue)
         
         # Archivage
