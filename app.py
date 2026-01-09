@@ -61,6 +61,7 @@ def ask_agent(role_name, instr, prompt, model, langue, use_search=False):
         tools=[search_tool] if use_search else []
     )
     try:
+        # Tentative d'appel direct
         response = client.models.generate_content(model=model, config=config, contents=prompt)
         return response.text
     except Exception as e:
@@ -71,11 +72,11 @@ st.title("💠 Intelligence Terminal")
 
 with st.sidebar:
     st.header("⚙️ Optimisation")
-    mode_eco = st.toggle("🚀 Mode Élite (Gemini Pro)", value=False)
+    mode_elite = st.toggle("🚀 Mode Élite (Gemini Pro)", value=False)
     
-    # --- CORRECTION DES NOMS ICI ---
-    # Utilisation des identifiants standards reconnus par l'API v1beta
-    CURRENT_PRO = "gemini-1.5-pro" if mode_eco else "gemini-1.5-flash"
+    # --- CORRECTION DES IDENTIFIANTS ICI ---
+    # Utilisation des strings exactes attendues par le SDK genai
+    CURRENT_PRO = "gemini-1.5-pro" if mode_elite else "gemini-1.5-flash"
     CURRENT_FLASH = "gemini-1.5-flash"
 
     st.divider()
@@ -96,15 +97,15 @@ with st.sidebar:
 # --- FORMULAIRE DE RECHERCHE ---
 sujet = st.text_input("", placeholder="Entrez le sujet stratégique...", label_visibility="collapsed")
 if st.button("DÉCRYPTER") and sujet:
-    with st.status(f"⚡ Analyse {'Elite' if mode_eco else 'Standard'}...", expanded=True) as status:
-        st.write("🔎 Scan des données...")
+    with st.status(f"⚡ Analyse {'Elite' if mode_elite else 'Standard'}...", expanded=True) as status:
+        st.write("🔎 Scout : Scan des données...")
         intel = ask_agent("Scout", "Cherche des faits.", f"Dernières infos sur {sujet}", CURRENT_FLASH, langue, True)
         
-        st.write("⚖️ Analyse croisée...")
+        st.write("⚖️ Expert : Analyse croisée...")
         d1 = ask_agent("Expert", "Analyse stratégique.", f"Analyse ce contexte: {intel}", CURRENT_PRO, langue)
         
-        st.write("✍️ Rédaction de l'éditorial...")
-        report = ask_agent("Expert", "Rédige un éditorial de prestige.", f"Sujet: {sujet}\nIntel: {intel}\nAnalyse: {d1}", CURRENT_PRO, langue)
+        st.write("✍️ Éditeur : Rédaction...")
+        report = ask_agent("Éditeur", "Rédige un éditorial de prestige.", f"Sujet: {sujet}\nIntel: {intel}\nAnalyse: {d1}", CURRENT_PRO, langue)
         
         st.session_state.archives.append({"sujet": sujet, "contenu": report, "date": datetime.now()})
         st.session_state.current_report = report
