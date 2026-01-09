@@ -26,6 +26,12 @@ st.markdown("""
         color: #e0e0e0;
         line-height: 1.6;
     }
+    .archive-item {
+        padding: 10px;
+        border-bottom: 1px solid #333;
+        font-size: 0.85em;
+        cursor: pointer;
+    }
     div.stButton > button:first-child {
         background: linear-gradient(45deg, #007bff, #00d4ff);
         border: none;
@@ -38,12 +44,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- INITIALISATION DES ARCHIVES ---
+# --- INITIALISATION DES ARCHIVES (Session State) ---
 if "archives" not in st.session_state:
     st.session_state.archives = []
 
 # --- GESTION DES SECRETS ---
-api_key = st.secrets.get("GOOGLE_API_KEY") or st.sidebar.text_input("🔑 API KEY", type="password")
+if "GOOGLE_API_KEY" in st.secrets:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+else:
+    api_key = st.sidebar.text_input("🔑 API KEY", type="password")
 
 if not api_key:
     st.title("💠 Elite Intelligence")
@@ -51,17 +60,17 @@ if not api_key:
     st.stop()
 
 client = genai.Client(api_key=api_key)
-
-# --- MOTEUR D'AGENTS ---
+MODEL_FLASH = "models/gemini-flash-latest"
+MODEL_PRO = "models/gemini-pro-latest"
 search_tool = types.Tool(google_search=types.GoogleSearch())
 
+# --- MOTEUR D'AGENTS ---
 def ask_agent(role_name, instr, prompt, model, langue, use_search=False):
     config = types.GenerateContentConfig(
         system_instruction=f"Tu es {role_name}. {instr} RÉPONDS EN {langue.upper()}.",
         tools=[search_tool] if use_search else []
     )
     try:
-        # Tentative d'appel direct
         response = client.models.generate_content(model=model, config=config, contents=prompt)
         return response.text
     except Exception as e:
@@ -71,15 +80,6 @@ def ask_agent(role_name, instr, prompt, model, langue, use_search=False):
 st.title("💠 Intelligence Terminal")
 
 with st.sidebar:
-    st.header("⚙️ Optimisation")
-    mode_elite = st.toggle("🚀 Mode Élite (Gemini Pro)", value=False)
-    
-    # --- CORRECTION DES IDENTIFIANTS ICI ---
-    # Utilisation des strings exactes attendues par le SDK genai
-    CURRENT_PRO = "gemini-1.5-pro" if mode_elite else "gemini-1.5-flash"
-    CURRENT_FLASH = "gemini-1.5-flash"
-
-    st.divider()
     st.header("📂 Archives Récentes")
     if not st.session_state.archives:
         st.write("Aucun rapport en mémoire.")
@@ -97,21 +97,12 @@ with st.sidebar:
 # --- FORMULAIRE DE RECHERCHE ---
 sujet = st.text_input("", placeholder="Entrez le sujet stratégique...", label_visibility="collapsed")
 if st.button("DÉCRYPTER") and sujet:
-    with st.status(f"⚡ Analyse {'Elite' if mode_elite else 'Standard'}...", expanded=True) as status:
-        st.write("🔎 Scout : Scan des données...")
-        intel = ask_agent("Scout", "Cherche des faits.", f"Dernières infos sur {sujet}", CURRENT_FLASH, langue, True)
+    with st.status("⚡ Analyse multi-agents...", expanded=True) as status:
+        st.write("🔎 Scan des données...")
+        intel = ask_agent("Scout", "Cherche des faits.", f"Dernières infos sur {sujet}", MODEL_FLASH, langue, True)
         
-        st.write("⚖️ Expert : Analyse croisée...")
-        d1 = ask_agent("Expert", "Analyse stratégique.", f"Analyse ce contexte: {intel}", CURRENT_PRO, langue)
+        st.write("⚖️ Analyse croisée...")
+        d1 = ask_agent("Expert", "Analyse stratégique.", f"Analyse ce contexte: {intel}", MODEL_PRO, langue)
         
-        st.write("✍️ Éditeur : Rédaction...")
-        report = ask_agent("Éditeur", "Rédige un éditorial de prestige.", f"Sujet: {sujet}\nIntel: {intel}\nAnalyse: {d1}", CURRENT_PRO, langue)
-        
-        st.session_state.archives.append({"sujet": sujet, "contenu": report, "date": datetime.now()})
-        st.session_state.current_report = report
-        status.update(label="Rapport Final Prêt", state="complete")
-
-# --- AFFICHAGE ---
-if "current_report" in st.session_state:
-    st.markdown(f'<div class="report-card">{st.session_state.current_report}</div>', unsafe_allow_html=True)
-    st.download_button("📥 EXPORTER", st.session_state.current_report, file_name=f"report.md")
+        st.write("✍️ Rédaction de l'éditorial...")
+        report = ask_agent("Éditeur", "Rédige un éditorial de prestige.", f
