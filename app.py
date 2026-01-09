@@ -129,4 +129,4 @@ if st.button("DÉCRYPTER") and sujet:
 # --- AFFICHAGE DU RAPPORT ACTIF ---
 if "current_report" in st.session_state:
     st.markdown(f'<div class="report-card">{st.session_state.current_report}</div>', unsafe_allow_html=True)
-    st.download_button("📥 EXPORTER", st.session_state.current_report, file_name=f"report.md")v
+    st.download_button("📥 EXPORTER", st.session_state.current_report, file_name=f"report.md")
