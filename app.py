@@ -96,11 +96,15 @@ search_tool = types.Tool(google_search=types.GoogleSearch())
 
 # --- MOTEUR D'AGENTS ---
 def ask_agent(role_name, instr, prompt, model, langue, use_search=False):
-    optim_instr = "Fournis une réponse riche, structurée et approfondie. "
+    # Instructions pour un rapport consistant et détaillé
+    detail_instr = (
+        "Fournis une réponse riche, structurée et approfondie. "
         "Développe chaque point avec précision, utilise des analyses nuancées "
-        "et assure une transition fluide entre les idées. "
+        "et assure une transition fluide entre les idées."
+    )
+    
     config = types.GenerateContentConfig(
-        system_instruction=f"Tu es {role_name}. {optim_instr} {instr} RÉPONDS EN {langue.upper()}.",
+        system_instruction=f"Tu es {role_name}. {detail_instr} {instr} RÉPONDS EN {langue.upper()}.",
         tools=[search_tool] if use_search else []
     )
     try:
@@ -119,23 +123,23 @@ if st.button("DÉCRYPTER") and sujet:
         
         # 1. SCOUT
         st.write("🔎 Scout : Scan des données sources...")
-        intel = ask_agent("Scout", "Cherche des faits.", f"Dernières infos sur {sujet}", active_scout_model, langue, True)
+        intel = ask_agent("Scout", "Cherche des faits exhaustifs.", f"Dernières infos sur {sujet}", active_scout_model, langue, True)
         
         # 2. EXPERT
-        st.write("⚖️ Expert : Analyse stratégique...")
-        d1 = ask_agent("Expert", "Analyse ce contexte.", f"Context: {intel}", active_expert_model, langue)
+        st.write("⚖️ Expert : Analyse stratégique approfondie...")
+        d1 = ask_agent("Expert", "Analyse ce contexte en détail.", f"Context: {intel}", active_expert_model, langue)
         
         # --- OPTIMISATION : PAUSE D'UNE MINUTE ---
         st.write("⏳ Temporisation de sécurité (1 min) avant rédaction...")
         pause_bar = st.progress(0)
         for percent_complete in range(100):
-            time.sleep(0.6) # 0.6s * 100 = 60 secondes
+            time.sleep(0.6)
             pause_bar.progress(percent_complete + 1)
         st.write("✅ Reprise du flux...")
         
         # 3. ÉDITEUR
-        st.write("✍️ Éditeur : Rédaction du rapport final...")
-        report = ask_agent("Éditeur", "Rédige un éditorial de prestige.", f"Sujet: {sujet}\nIntel: {intel}\nAnalyse: {d1}", active_editor_model, langue)
+        st.write("✍️ Éditeur : Rédaction du rapport final de prestige...")
+        report = ask_agent("Éditeur", "Rédige un éditorial de prestige complet.", f"Sujet: {sujet}\nIntel: {intel}\nAnalyse: {d1}", active_editor_model, langue)
         
         # Archivage
         st.session_state.archives.append({"sujet": sujet, "contenu": report, "date": datetime.now()})
