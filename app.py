@@ -35,8 +35,6 @@ st.markdown("""
         font-weight: bold;
         width: 100%;
     }
-    /* Style pour le toggle */
-    .stCheckbox { color: #00d4ff; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -59,26 +57,27 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-# --- CONFIGURATION DYNAMIQUE (OPTIMISATION COÛTS) ---
+# --- CONFIGURATION DES MODES (Objectif 1 : Optimisation Coûts) ---
+MODEL_FLASH = "models/gemini-flash-latest"
+MODEL_PRO = "models/gemini-pro-latest"
+
 with st.sidebar:
-    st.header("⚙️ Paramètres Système")
+    st.header("⚙️ Paramètres")
+    # Toggle pour choisir le mode
+    mode_elite = st.toggle("💎 Mode Élite", value=False, help="Standard: Flash partout | Élite: Pro pour l'Expert et l'Éditeur")
     
-    # Objectif 1 : Toggle Mode Standard vs Élite
-    mode_elite = st.toggle("💎 Mode Élite", value=False, help="Désactivé: Flash (Économique) | Activé: Pro (Analytique)")
-    
-    MODEL_SCOUT = "gemini-1.5-flash"
+    # Attribution dynamique des modèles selon le toggle
+    active_scout_model = MODEL_FLASH
     if mode_elite:
-        MODEL_EXPERT = "gemini-1.5-pro"
-        MODEL_EDITOR = "gemini-1.5-pro"
-        status_msg = "Performance Maximale (Pro)"
+        active_expert_model = MODEL_PRO
+        active_editor_model = MODEL_PRO
+        st.caption("🚀 **Mode Élite activé** (Qualité Pro)")
     else:
-        MODEL_EXPERT = "gemini-1.5-flash"
-        MODEL_EDITOR = "gemini-1.5-flash"
-        status_msg = "Économie de Tokens (Flash)"
-    
-    st.caption(f"Mode actuel : **{status_msg}**")
+        active_expert_model = MODEL_FLASH
+        active_editor_model = MODEL_FLASH
+        st.caption("🔋 **Mode Standard activé** (Économie Flash)")
+
     st.divider()
-    
     st.header("📂 Archives Récentes")
     if not st.session_state.archives:
         st.write("Aucun rapport.")
@@ -99,16 +98,11 @@ search_tool = types.Tool(google_search=types.GoogleSearch())
 
 # --- MOTEUR D'AGENTS ---
 def ask_agent(role_name, instr, prompt, model, langue, use_search=False):
-    # Objectif 2 : Directives de concision intégrées systématiquement
-    system_prompt = (
-        f"Tu es {role_name}. {instr} "
-        f"CONSIGNE STRICTE : Sois extrêmement concis et factuel. "
-        f"Évite les formules de politesse et le bavardage. "
-        f"Utilise des listes à puces. RÉPONDS EN {langue.upper()}."
-    )
+    # Objectif 2 : Instructions de concision pour réduire la consommation de tokens
+    optim_instr = "RÉPONSE COURTE ET FACTUELLE UNIQUEMENT. Pas d'introduction ni de conclusion. Style télégraphique ou listes. "
     
     config = types.GenerateContentConfig(
-        system_instruction=system_prompt,
+        system_instruction=f"Tu es {role_name}. {optim_instr} {instr} RÉPONDS EN {langue.upper()}.",
         tools=[search_tool] if use_search else []
     )
     try:
@@ -120,35 +114,26 @@ def ask_agent(role_name, instr, prompt, model, langue, use_search=False):
 # --- INTERFACE PRINCIPALE ---
 st.title("💠 Intelligence Terminal")
 
-# Formulaire de saisie
-sujet = st.text_input("", placeholder="Entrez le sujet stratégique...", label_visibility="collapsed")
+sujet = st.text_input("", placeholder="Sujet stratégique à décrypter...", label_visibility="collapsed")
 
 if st.button("DÉCRYPTER") and sujet:
-    with st.status("⚡ Orchestration des agents...", expanded=True) as status:
+    with st.status("⚡ Analyse multi-agents...", expanded=True) as status:
         
-        # Agent 1 : Scout (Toujours Flash pour la recherche)
-        st.write("🔎 Scan des données sources...")
-        intel = ask_agent("Scout", "Cherche des faits récents.", f"Dernières infos sur {sujet}", MODEL_SCOUT, langue, True)
+        st.write("🔎 Scout : Scan des données...")
+        intel = ask_agent("Scout", "Cherche des faits.", f"Dernières infos sur {sujet}", active_scout_model, langue, True)
         
-        # Agent 2 : Expert (Flash ou Pro selon le Toggle)
-        st.write("⚖️ Analyse stratégique...")
-        d1 = ask_agent("Expert", "Analyse les implications et risques.", f"Contexte : {intel}", MODEL_EXPERT, langue)
+        st.write("⚖️ Expert : Analyse stratégique...")
+        d1 = ask_agent("Expert", "Analyse ce contexte.", f"Context: {intel}", active_expert_model, langue)
         
-        # Agent 3 : Éditeur (Flash ou Pro selon le Toggle)
-        st.write("✍️ Génération de l'éditorial...")
-        report = ask_agent("Éditeur", "Rédige une synthèse de haut niveau.", f"Sujet: {sujet}\nDonnées: {intel}\nAnalyse: {d1}", MODEL_EDITOR, langue)
+        st.write("✍️ Éditeur : Rédaction finale...")
+        report = ask_agent("Éditeur", "Rédige un éditorial de prestige.", f"Sujet: {sujet}\nIntel: {intel}\nAnalyse: {d1}", active_editor_model, langue)
         
-        # Sauvegarde
+        # Archivage
         st.session_state.archives.append({"sujet": sujet, "contenu": report, "date": datetime.now()})
         st.session_state.current_report = report
-        status.update(label="Analyse terminée", state="complete")
+        status.update(label="Rapport Final Prêt", state="complete")
 
-# --- AFFICHAGE DU RAPPORT ACTIF ---
+# --- AFFICHAGE DU RAPPORT ---
 if st.session_state.current_report:
     st.markdown(f'<div class="report-card">{st.session_state.current_report}</div>', unsafe_allow_html=True)
-    st.download_button(
-        label="📥 EXPORTER LE RAPPORT",
-        data=st.session_state.current_report,
-        file_name=f"rapport_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
-        mime="text/markdown"
-    )
+    st.download_button("📥 EXPORTER (.md)", st.session_state.current_report, file_name=f"elite_report.md")
