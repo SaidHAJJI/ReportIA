@@ -96,7 +96,9 @@ search_tool = types.Tool(google_search=types.GoogleSearch())
 
 # --- MOTEUR D'AGENTS ---
 def ask_agent(role_name, instr, prompt, model, langue, use_search=False):
-    optim_instr = "RÉPONSE COURTE ET FACTUELLE. Style direct. "
+    optim_instr = "Fournis une réponse riche, structurée et approfondie. "
+        "Développe chaque point avec précision, utilise des analyses nuancées "
+        "et assure une transition fluide entre les idées. "
     config = types.GenerateContentConfig(
         system_instruction=f"Tu es {role_name}. {optim_instr} {instr} RÉPONDS EN {langue.upper()}.",
         tools=[search_tool] if use_search else []
