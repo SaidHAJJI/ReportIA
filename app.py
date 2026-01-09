@@ -11,13 +11,15 @@ if "archives" not in st.session_state:
 
 client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
 
-# --- MOTEUR D'AGENTS ---
+# --- MOTEUR D'AGENTS (NETTOYÉ DE TOUT TOOL) ---
 def ask_agent(role_name, instr, prompt, model, langue, max_tokens=1200):
+    # On définit uniquement ce qui est nécessaire. Pas de paramètre 'tools'.
     config = types.GenerateContentConfig(
         system_instruction=f"{role_name}: {instr} EN {langue.upper()}.",
         max_output_tokens=max_tokens,
         temperature=0.7
     )
+    # L'appel est maintenant ultra-basique pour éviter les ClientError
     response = client.models.generate_content(model=model, config=config, contents=prompt)
     return response.text
 
@@ -26,14 +28,12 @@ st.title("💠 Intelligence Terminal")
 
 with st.sidebar:
     st.header("⚙️ Configuration")
-    # Sélecteur de puissance pour optimiser les coûts
     mode_puissance = st.radio(
         "Mode d'analyse :",
         ["Standard (Économique)", "Élite (Précision Pro)"],
         help="Standard utilise Flash (moins cher). Élite utilise Pro (plus analytique)."
     )
     
-    # Choix du modèle selon le mode
     model_choice = "gemini-1.5-pro" if "Élite" in mode_puissance else "gemini-1.5-flash"
     
     st.divider()
@@ -47,18 +47,16 @@ with st.sidebar:
 sujet = st.text_input("", placeholder="Sujet stratégique...", label_visibility="collapsed")
 
 if st.button("DÉCRYPTER") and sujet:
-    with st.status(f"⚡ Analyse en mode {mode_puissance}...", expanded=True) as status:
+    with st.status(f"⚡ Analyse {mode_puissance}...", expanded=True) as status:
         
-        # Agent 1 : Scout (Toujours Flash car il traite du volume)
-        st.write("🔎 Scout : Scan des données...")
+        st.write("🔎 Scout : Analyse...")
+        # Scout est toujours en Flash pour économiser
         intel = ask_agent("Scout", "Extraits les faits clés.", f"Sujet: {sujet}", "gemini-1.5-flash", langue, max_tokens=600)
         
-        # Agent 2 : Expert (Variable selon le mode choisi)
-        st.write(f"⚖️ Expert : Analyse ({mode_puissance})...")
+        st.write(f"⚖️ Expert : Analyse...")
         analyse = ask_agent("Expert", "Analyse l'impact stratégique.", intel, model_choice, langue, max_tokens=1000)
         
-        # Agent 3 : Éditeur (Variable selon le mode choisi)
-        st.write(f"✍️ Éditeur : Rédaction ({mode_puissance})...")
+        st.write(f"✍️ Éditeur : Rédaction...")
         report = ask_agent("Éditeur", "Rédige l'éditorial final en Markdown.", f"Base: {intel}\nAnalyse: {analyse}", model_choice, langue, max_tokens=1500)
         
         st.session_state.archives.append({"sujet": sujet, "contenu": report})
@@ -67,5 +65,5 @@ if st.button("DÉCRYPTER") and sujet:
 
 # --- AFFICHAGE ---
 if "current_report" in st.session_state:
-    st.markdown(f'<div style="background-color: #1a1c24; border-radius: 15px; padding: 25px; border-left: 5px solid #00d4ff; color: #e0e0e0; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">{st.session_state.current_report}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color: #1a1c24; border-radius: 15px; padding: 25px; border-left: 5px solid #00d4ff; color: #e0e0e0;">{st.session_state.current_report}</div>', unsafe_allow_html=True)
     st.download_button("📥 EXPORTER", st.session_state.current_report, file_name=f"report_{datetime.now().strftime('%d%m')}.md")
