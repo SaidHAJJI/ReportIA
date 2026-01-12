@@ -3,6 +3,7 @@ import time
 from datetime import datetime
 from google import genai
 from google.genai import types
+import streamlit.components.v1 as components
 
 # --- CONFIGURATION PRE-REQUIS ---
 st.set_page_config(
@@ -37,6 +38,25 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
+
+# --- FONCTION TTS (JavaScript Injection) ---
+def text_to_speech(text, langue):
+    # Mapping simple pour les codes de langue
+    lang_code = {"Français": "fr-FR", "Anglais": "en-US", "Arabe": "ar-SA"}.get(langue, "fr-FR")
+    
+    # Nettoyage du texte pour éviter les erreurs JS (suppression des backticks et guillemets)
+    clean_text = text.replace("'", "\\'").replace("\n", " ")
+    
+    tts_script = f"""
+    <script>
+        var msg = new SpeechSynthesisUtterance();
+        msg.text = "{clean_text}";
+        msg.lang = "{lang_code}";
+        msg.rate = 1.0;
+        window.speechSynthesis.speak(msg);
+    </script>
+    """
+    components.html(tts_script, height=0)
 
 # --- INITIALISATION DES ARCHIVES ---
 if "archives" not in st.session_state:
@@ -134,16 +154,16 @@ if st.button("DÉCRYPTER") and sujet:
 
 # --- AFFICHAGE ET EXPORT ---
 if st.session_state.current_report:
+    # Boutons d'action rapides
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔊 ÉCOUTER LE RAPPORT"):
+            text_to_speech(st.session_state.current_report, langue)
+            
+    with col2:
+        clean_name = "".join([c for c in st.session_state.last_sujet if c.isalnum() or c==' ']).rstrip()
+        filename = f"INTEL_{clean_name}.md"
+        st.download_button("📥 SAUVEGARDER", st.session_state.current_report, file_name=filename)
+
     st.markdown(f'<div class="report-card">{st.session_state.current_report}</div>', unsafe_allow_html=True)
-    
-    # Nom de fichier dynamique pour faciliter le rangement sur Drive
-    clean_name = "".join([c for c in st.session_state.last_sujet if c.isalnum() or c==' ']).rstrip()
-    filename = f"INTEL_{clean_name}_{datetime.now().strftime('%d-%m-%y')}.md"
-    
-    st.download_button(
-        label="📥 CHOISIR EMPLACEMENT & SAUVEGARDER",
-        data=st.session_state.current_report,
-        file_name=filename,
-        mime="text/markdown",
-        help="Cliquez pour ouvrir la fenêtre de sélection de dossier de votre système."
-    )
