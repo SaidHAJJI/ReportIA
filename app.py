@@ -36,29 +36,47 @@ st.markdown("""
         font-weight: bold;
         width: 100%;
     }
+    .tts-container {
+        padding: 10px;
+        background: #1a1c24;
+        border-radius: 10px;
+        text-align: center;
+        margin-bottom: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- FONCTION TTS (JavaScript Injection) ---
-def text_to_speech(text, langue):
-    # Mapping simple pour les codes de langue
+# --- COMPOSANT TTS AMÉLIORÉ ---
+def tts_component(text, langue):
     lang_code = {"Français": "fr-FR", "Anglais": "en-US", "Arabe": "ar-SA"}.get(langue, "fr-FR")
+    clean_text = text.replace("'", "\\'").replace("\n", " ").replace('"', '\\"')
     
-    # Nettoyage du texte pour éviter les erreurs JS (suppression des backticks et guillemets)
-    clean_text = text.replace("'", "\\'").replace("\n", " ")
-    
-    tts_script = f"""
+    # Bouton HTML natif pour forcer l'interaction utilisateur
+    html_code = f"""
+    <div style="display: flex; gap: 10px; justify-content: center; align-items: center; background: #1a1c24; padding: 15px; border-radius: 15px;">
+        <button onclick="speak()" style="background: linear-gradient(45deg, #28a745, #20c997); border: none; color: white; padding: 10px 20px; border-radius: 20px; cursor: pointer; font-weight: bold;">▶ ÉCOUTER</button>
+        <button onclick="stop()" style="background: linear-gradient(45deg, #dc3545, #f8d7da); border: none; color: #721c24; padding: 10px 20px; border-radius: 20px; cursor: pointer; font-weight: bold;">⏹ STOP</button>
+    </div>
+
     <script>
         var msg = new SpeechSynthesisUtterance();
         msg.text = "{clean_text}";
         msg.lang = "{lang_code}";
         msg.rate = 1.0;
-        window.speechSynthesis.speak(msg);
+
+        function speak() {{
+            window.speechSynthesis.cancel(); // Arrête toute lecture en cours
+            window.speechSynthesis.speak(msg);
+        }}
+
+        function stop() {{
+            window.speechSynthesis.cancel();
+        }}
     </script>
     """
-    components.html(tts_script, height=0)
+    components.html(html_code, height=80)
 
-# --- INITIALISATION DES ARCHIVES ---
+# --- INITIALISATION ---
 if "archives" not in st.session_state:
     st.session_state.archives = []
 if "current_report" not in st.session_state:
@@ -79,7 +97,7 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-# --- CONFIGURATION DES MODES ---
+# --- CONFIGURATION MODES ---
 MODEL_FLASH = "models/gemini-flash-latest"
 MODEL_PRO = "models/gemini-pro-latest"
 
@@ -104,7 +122,6 @@ with st.sidebar:
                 st.session_state.last_sujet = arc['sujet']
                 st.rerun()
     
-    st.divider()
     langue = st.selectbox("Langue", ["Français", "Anglais", "Arabe"])
     if st.button("🗑️ Effacer l'historique"):
         st.session_state.archives = []
@@ -113,12 +130,8 @@ with st.sidebar:
 
 search_tool = types.Tool(google_search=types.GoogleSearch())
 
-# --- MOTEUR D'AGENTS ---
 def ask_agent(role_name, instr, prompt, model, langue, use_search=False):
-    detail_instr = (
-        "Fournis une réponse riche, structurée et approfondie. "
-        "Développe chaque point avec précision et nuance."
-    )
+    detail_instr = "Fournis une réponse riche, structurée et approfondie."
     config = types.GenerateContentConfig(
         system_instruction=f"Tu es {role_name}. {detail_instr} {instr} RÉPONDS EN {langue.upper()}.",
         tools=[search_tool] if use_search else []
@@ -139,7 +152,7 @@ if st.button("DÉCRYPTER") and sujet:
         intel = ask_agent("Scout", "Faits exhaustifs.", f"Infos sur {sujet}", active_scout_model, langue, True)
         d1 = ask_agent("Expert", "Analyse détaillée.", f"Context: {intel}", active_expert_model, langue)
         
-        st.write("⏳ Temporisation de sécurité (1 min)...")
+        st.write("⏳ Temporisation (1 min)...")
         p_bar = st.progress(0)
         for i in range(100):
             time.sleep(0.6)
@@ -154,16 +167,12 @@ if st.button("DÉCRYPTER") and sujet:
 
 # --- AFFICHAGE ET EXPORT ---
 if st.session_state.current_report:
-    # Boutons d'action rapides
-    col1, col2 = st.columns(2)
+    # 1. Barre d'outils vocale (Nouveau composant interactif)
+    tts_component(st.session_state.current_report, langue)
     
-    with col1:
-        if st.button("🔊 ÉCOUTER LE RAPPORT"):
-            text_to_speech(st.session_state.current_report, langue)
-            
-    with col2:
-        clean_name = "".join([c for c in st.session_state.last_sujet if c.isalnum() or c==' ']).rstrip()
-        filename = f"INTEL_{clean_name}.md"
-        st.download_button("📥 SAUVEGARDER", st.session_state.current_report, file_name=filename)
+    # 2. Bouton de sauvegarde
+    clean_name = "".join([c for c in st.session_state.last_sujet if c.isalnum() or c==' ']).rstrip()
+    st.download_button("📥 SAUVEGARDER LE RAPPORT", st.session_state.current_report, file_name=f"INTEL_{clean_name}.md")
 
+    # 3. Rapport
     st.markdown(f'<div class="report-card">{st.session_state.current_report}</div>', unsafe_allow_html=True)
