@@ -43,6 +43,8 @@ if "archives" not in st.session_state:
     st.session_state.archives = []
 if "current_report" not in st.session_state:
     st.session_state.current_report = None
+if "last_sujet" not in st.session_state:
+    st.session_state.last_sujet = "rapport"
 
 # --- GESTION DES SECRETS ---
 if "GOOGLE_API_KEY" in st.secrets:
@@ -63,26 +65,23 @@ MODEL_PRO = "models/gemini-pro-latest"
 
 with st.sidebar:
     st.header("⚙️ Paramètres")
-    mode_elite = st.toggle("💎 Mode Élite", value=False, help="Standard: Flash partout | Élite: Pro pour l'Expert et l'Éditeur")
+    mode_elite = st.toggle("💎 Mode Élite", value=False)
     
     active_scout_model = MODEL_FLASH
     if mode_elite:
         active_expert_model = MODEL_PRO
         active_editor_model = MODEL_PRO
-        st.caption("🚀 **Mode Élite activé** (Qualité Pro)")
     else:
         active_expert_model = MODEL_FLASH
         active_editor_model = MODEL_FLASH
-        st.caption("🔋 **Mode Standard activé** (Économie Flash)")
 
     st.divider()
     st.header("📂 Archives Récentes")
-    if not st.session_state.archives:
-        st.write("Aucun rapport.")
-    else:
+    if st.session_state.archives:
         for i, arc in enumerate(reversed(st.session_state.archives[-5:])):
             if st.button(f"📄 {arc['sujet'][:20]}...", key=f"arc_{i}"):
                 st.session_state.current_report = arc['contenu']
+                st.session_state.last_sujet = arc['sujet']
                 st.rerun()
     
     st.divider()
@@ -96,13 +95,10 @@ search_tool = types.Tool(google_search=types.GoogleSearch())
 
 # --- MOTEUR D'AGENTS ---
 def ask_agent(role_name, instr, prompt, model, langue, use_search=False):
-    # Instructions pour un rapport consistant et détaillé
     detail_instr = (
         "Fournis une réponse riche, structurée et approfondie. "
-        "Développe chaque point avec précision, utilise des analyses nuancées "
-        "et assure une transition fluide entre les idées."
+        "Développe chaque point avec précision et nuance."
     )
-    
     config = types.GenerateContentConfig(
         system_instruction=f"Tu es {role_name}. {detail_instr} {instr} RÉPONDS EN {langue.upper()}.",
         tools=[search_tool] if use_search else []
@@ -116,37 +112,38 @@ def ask_agent(role_name, instr, prompt, model, langue, use_search=False):
 # --- INTERFACE PRINCIPALE ---
 st.title("💠 Intelligence Terminal")
 
-sujet = st.text_input("", placeholder="Sujet stratégique à décrypter...", label_visibility="collapsed")
+sujet = st.text_input("", placeholder="Sujet stratégique...", label_visibility="collapsed")
 
 if st.button("DÉCRYPTER") and sujet:
-    with st.status("⚡ Orchestration Multi-Agents...", expanded=True) as status:
+    with st.status("⚡ Orchestration...", expanded=True) as status:
+        intel = ask_agent("Scout", "Faits exhaustifs.", f"Infos sur {sujet}", active_scout_model, langue, True)
+        d1 = ask_agent("Expert", "Analyse détaillée.", f"Context: {intel}", active_expert_model, langue)
         
-        # 1. SCOUT
-        st.write("🔎 Scout : Scan des données sources...")
-        intel = ask_agent("Scout", "Cherche des faits exhaustifs.", f"Dernières infos sur {sujet}", active_scout_model, langue, True)
-        
-        # 2. EXPERT
-        st.write("⚖️ Expert : Analyse stratégique approfondie...")
-        d1 = ask_agent("Expert", "Analyse ce contexte en détail.", f"Context: {intel}", active_expert_model, langue)
-        
-        # --- OPTIMISATION : PAUSE D'UNE MINUTE ---
-        st.write("⏳ Temporisation de sécurité (1 min) avant rédaction...")
-        pause_bar = st.progress(0)
-        for percent_complete in range(100):
+        st.write("⏳ Temporisation de sécurité (1 min)...")
+        p_bar = st.progress(0)
+        for i in range(100):
             time.sleep(0.6)
-            pause_bar.progress(percent_complete + 1)
-        st.write("✅ Reprise du flux...")
+            p_bar.progress(i + 1)
+            
+        report = ask_agent("Éditeur", "Éditorial complet.", f"Sujet: {sujet}\nIntel: {intel}\nAnalyse: {d1}", active_editor_model, langue)
         
-        # 3. ÉDITEUR
-        st.write("✍️ Éditeur : Rédaction du rapport final de prestige...")
-        report = ask_agent("Éditeur", "Rédige un éditorial de prestige complet.", f"Sujet: {sujet}\nIntel: {intel}\nAnalyse: {d1}", active_editor_model, langue)
-        
-        # Archivage
-        st.session_state.archives.append({"sujet": sujet, "contenu": report, "date": datetime.now()})
+        st.session_state.archives.append({"sujet": sujet, "contenu": report})
         st.session_state.current_report = report
-        status.update(label="Rapport Final Prêt", state="complete")
+        st.session_state.last_sujet = sujet
+        status.update(label="Terminé", state="complete")
 
-# --- AFFICHAGE DU RAPPORT ---
+# --- AFFICHAGE ET EXPORT ---
 if st.session_state.current_report:
     st.markdown(f'<div class="report-card">{st.session_state.current_report}</div>', unsafe_allow_html=True)
-    st.download_button("📥 EXPORTER (.md)", st.session_state.current_report, file_name=f"elite_report.md")
+    
+    # Nom de fichier dynamique pour faciliter le rangement sur Drive
+    clean_name = "".join([c for c in st.session_state.last_sujet if c.isalnum() or c==' ']).rstrip()
+    filename = f"INTEL_{clean_name}_{datetime.now().strftime('%d-%m-%y')}.md"
+    
+    st.download_button(
+        label="📥 CHOISIR EMPLACEMENT & SAUVEGARDER",
+        data=st.session_state.current_report,
+        file_name=filename,
+        mime="text/markdown",
+        help="Cliquez pour ouvrir la fenêtre de sélection de dossier de votre système."
+    )
